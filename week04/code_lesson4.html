@@ -1,0 +1,427 @@
+<html>
+
+<head>
+<title>動畫與互動 - IGL WebGL Lesson 4</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="../GLjs/webgl-utils.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+
+    varying vec4 vColor;
+
+    void main(void) {
+        gl_FragColor = vColor;
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec4 aVertexColor;
+
+      uniform mat4 uViewMatrix;
+      uniform mat4 uModelMatrix;
+      uniform mat4 uProjectionMatrix;
+
+    varying vec4 vColor;
+
+    void main(void) {
+        gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aVertexPosition, 1.0);
+        vColor = aVertexColor;
+    }
+</script>
+
+
+<script type="text/javascript">
+
+    var gl;
+
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.vertexColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+        gl.enableVertexAttribArray(shaderProgram.vertexColorAttribute);
+
+        shaderProgram.projectionMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
+        shaderProgram.viewMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uViewMatrix");
+        shaderProgram.modelMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uModelMatrix");
+    }
+
+
+var matrix_modes = ["view", "model", "projection", "texture", "color"];
+      var Matries = [];
+
+      function initMatrix(){
+        //依序初始化所有矩陣堆疊
+        for(var i=0; i<matrix_modes.length; ++i){
+          Matries[matrix_modes[i]] = [mat4.create()];
+        }
+      }
+      function TopMatrix(matrix_mode) {
+        //只作用在矩陣堆疊的頂層
+        return Matries[matrix_mode][Matries[matrix_mode].length-1];
+      }
+      function PushMatrix(matrix_mode) {
+        //建立一個零矩陣來準備儲存矩陣
+        var copy = mat4.create();
+        //將堆疊頂層的矩陣複製一份
+        mat4.set(TopMatrix(matrix_mode), copy);
+        //再放進堆疊
+        Matries[matrix_mode].push(copy);
+      }
+
+      function PopMatrix(matrix_mode) {
+        if (Matries[matrix_mode].length == 0) {
+          throw "Invalid popMatrix!";
+        }
+        Matries[matrix_mode].pop();
+      }
+
+
+      function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.projectionMatrixUniform, false, TopMatrix("projection"));
+        gl.uniformMatrix4fv(shaderProgram.viewMatrixUniform, false, TopMatrix("view"));
+        gl.uniformMatrix4fv(shaderProgram.modelMatrixUniform, false, TopMatrix("model"));
+        //尚未用到的矩陣
+        //gl.uniformMatrix4fv(shaderProgram.colorMatrixUniform, false, TopMatrix("color"));
+        //gl.uniformMatrix4fv(shaderProgram.textureMatrixUniform, false, TopMatrix("texture"));
+      }
+
+
+    function degToRad(degrees) {
+        return degrees * Math.PI / 180;    //角度變弧度計算公式
+    }
+
+
+    var triangleVertexPositionBuffer;
+    var triangleVertexColorBuffer;
+    var squareVertexPositionBuffer;
+    var squareVertexColorBuffer;
+    var hexagonVertexPositionBuffer;
+    var hexagonVertexColorBuffer;
+
+    function initBuffers() {
+        triangleVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+        var vertices = [
+             0.0,  1.0,  0.0,
+            -1.0, -1.0,  0.0,
+             1.0, -1.0,  0.0
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        triangleVertexPositionBuffer.itemSize = 3;
+        triangleVertexPositionBuffer.numItems = 3;
+
+        triangleVertexColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+        var colors = [
+            1.0, 0.0, 0.0, 1.0,
+            0.0, 1.0, 0.0, 1.0,
+            0.0, 0.0, 1.0, 1.0
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+        triangleVertexColorBuffer.itemSize = 4;
+        triangleVertexColorBuffer.numItems = 3;
+
+
+        squareVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        vertices = [
+             1.0,  1.0,  0.0,
+            -1.0,  1.0,  0.0,
+             1.0, -1.0,  0.0,
+            -1.0, -1.0,  0.0
+            ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        squareVertexPositionBuffer.itemSize = 3;
+        squareVertexPositionBuffer.numItems = 4;
+
+        squareVertexColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+        colors = [];
+        for (var i=0; i < 4; i++) {
+            colors = colors.concat([0.5, 0.5, 1.0, 1.0]);
+        }
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+        squareVertexColorBuffer.itemSize = 4;
+        squareVertexColorBuffer.numItems = 4;
+
+        hexagonVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, hexagonVertexPositionBuffer);
+        var vertices = [
+             -0.5, 0.866, 0,
+             -1, 0, 0,
+             0.5, 0.866, 0,
+             -0.5, -0.866, 0,
+             1, 0, 0,
+             0.5, -0.866, 0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        hexagonVertexPositionBuffer.itemSize = 3;
+        hexagonVertexPositionBuffer.numItems = 6;
+
+        hexagonVertexColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, hexagonVertexColorBuffer);
+        var colors = [
+            0.0, 0.0, 1.0, 1.0,
+            0.9, 1.0, 0.8, 1.0,
+            0.0, 1.0, 0.0, 1.0,
+            0.1, 1.0, 0.8, 1.0,
+            0.7, 1.0, 0.8, 1.0,
+            0.8, 1.0, 0.5, 1.0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+        hexagonVertexColorBuffer.itemSize = 4;
+        hexagonVertexColorBuffer.numItems = 6;
+
+        initMatrix();
+
+    }
+    var squarePosition = {x:0, y:0, z:0};
+
+    var currentlyPressedKeys = {};
+    function handleKeyDown(event) {
+    	currentlyPressedKeys[event.keyCode] = true;   //一個空物件類型
+    }
+    
+    function handleKeyUp(event) {
+        currentlyPressedKeys[event.keyCode] = false;
+    }
+
+    function handleKeys() {
+
+        if (currentlyPressedKeys[83]) squarePosition.z += 0.1; //w
+  	    if (currentlyPressedKeys[87]) squarePosition.z -= 0.1; //s
+        if (currentlyPressedKeys[65]) squarePosition.x -= 0.1; //a
+  		if (currentlyPressedKeys[68]) squarePosition.x += 0.1; //d
+        if (currentlyPressedKeys[90]) squarePosition.y += 0.1; //z
+  		if (currentlyPressedKeys[88]) squarePosition.y -= 0.1; //x
+        if (currentlyPressedKeys[86]) rSquare -= 5; //v
+        if (currentlyPressedKeys[67]) rSquare += 5; //c
+        if(rSquare<=-360)rSquare+=360;
+        if(rSquare>=360)rSquare-=360;
+		//
+    }
+
+
+    var rTri = 0; //追蹤三角形的旋轉
+    var rSquare = 0; //追蹤方形的旋轉
+    var rHexagon = 0;
+
+    function drawScene() {
+
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+/*Define Projection Matrix*/
+mat4.identity(TopMatrix("projection"));
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, TopMatrix("projection"));
+
+        /*Define Viewing Matrix*/
+        mat4.identity(TopMatrix("view"));
+		var lookAtMatrix = mat4.create(TopMatrix("view"));
+        
+    	mat4.lookAt([0.0, 0.0, 0.0], [0.0, 0.0, -7.0], [0.0, 1.0, 0.0], lookAtMatrix);
+		mat4.multiply(TopMatrix("view"), lookAtMatrix , TopMatrix("view"));
+
+/*Define Model Matrix*/
+    	mat4.identity(TopMatrix("model"));
+
+        mat4.translate(TopMatrix("model"), [-1.5, 0.0, -7.0]);
+
+        PushMatrix("model");
+	        mat4.rotate(TopMatrix("model"), degToRad(rTri), [0, 1, 0]);   //[x,y,z],繞著y軸轉
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, triangleVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        setMatrixUniforms();
+	        gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+        PopMatrix("model");    //拋棄當前矩陣， 從堆疊最上層的取出之前的矩陣並存起來
+
+
+        mat4.translate(TopMatrix("model"), [3.0, 1.0, 0.0]);
+		PushMatrix("model");  //把矩陣放置到堆疊中
+			mat4.translate(TopMatrix("model"), [squarePosition.x, squarePosition.y, squarePosition.z]);
+
+	        mat4.rotate(TopMatrix("model"), degToRad(rSquare), [1, 0, 0]);   //[x,y,z],繞著x軸轉
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexColorBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, squareVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        setMatrixUniforms();
+	        gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);
+
+		PopMatrix("model");   //拋棄當前矩陣， 從堆疊最上層的取出之前的矩陣並存起來
+
+        mat4.translate(TopMatrix("model"), [0.0, -3.0, -2.0]);
+
+        PushMatrix("model");  //把矩陣放置到堆疊中
+	        mat4.rotate(TopMatrix("model"), degToRad(rHexagon), [1, 1, 0]);   //[x,y,z],繞著x軸轉
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, hexagonVertexPositionBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, hexagonVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, hexagonVertexColorBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, hexagonVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        setMatrixUniforms();
+	        gl.drawArrays(gl.TRIANGLE_STRIP, 0, hexagonVertexPositionBuffer.numItems);
+
+        PopMatrix("model");     //拋棄當前矩陣， 從堆疊最上層的取出之前的矩陣並存起來
+    }
+
+
+    var lastTime = 0;
+
+    function animate() {    //隨時間改變弧度
+        var timeNow = new Date().getTime();
+        if (lastTime != 0) {
+            var elapsed = timeNow - lastTime;
+
+            rTri += (75 * elapsed) / 1000.0;      //90度/秒
+            rSquare += (9 * elapsed) / 1000.0;   //75度/秒
+            rHexagon += (40 * elapsed) / 1000.0;
+        }
+        lastTime = timeNow;
+    }
+
+    function update(){
+        requestAnimFrame(update);
+        PushMatrix("model");
+	        mat4.rotate(TopMatrix("model"), degToRad(rTri), [0, 1, 0]);   //[x,y,z],繞著y軸轉
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexColorBuffer);
+	        gl.vertexAttribPointer(shaderProgram.vertexColorAttribute, triangleVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+	        setMatrixUniforms();
+	        gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+        PopMatrix("model");    //拋棄當前矩陣， 從堆疊最上層的取出之前的矩陣並存起來
+        animate();
+    }
+
+    function tick() {
+        requestAnimFrame(tick); //更新相關參數為下一次繪製畫面做準備
+        handleKeys();
+        drawScene();
+        animate();
+    }
+
+
+    function webGLStart() {
+        var canvas = document.getElementById("lesson04-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+
+        gl.clearColor(1.0, 1.0, 1.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+        document.onkeydown = handleKeyDown;   //按鍵壓下
+        document.onkeyup = handleKeyUp;   //放開此按鍵
+
+
+        tick(); //此函數需要被重複呼叫
+    }
+
+</script>
+
+</head>
+
+
+<body onload="webGLStart();">
+    <h2>Lessons 4 : 動畫與互動</h2>
+
+    <canvas id="lesson04-canvas" style="border: none;" width="500" height="500"></canvas>
+	<p>Hint:</p>
+	   <ul>
+        <li>「<code>Press W」</code>/<code>「Press S」</code> to  zoom out/in</li>
+        <li>「<code>Press A」</code>/<code>「Press D」</code> to  go left/right</li>
+        <li>「<code>Press C」</code>/<code>「Press V」</code> to  rotate</li>
+    </ul>
+    <br/>
+    <p align="center"><a href="https://igl.cse.ntou.edu.tw/">© 2020 IGL</a></p>
+    <br/>
+</body>
+
+</html>

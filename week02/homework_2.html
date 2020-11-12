@@ -1,0 +1,52 @@
+﻿<html>
+
+<head>
+<title>WebGL - HW1</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="shader.js"></script>
+<script type="text/javascript">
+    function drawScene() {
+        drawPolygon2D([-3, 1, -12], {method: GL.TRIANGLE_STRIP, color: [
+                [1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1], [1, 0, 1, 1]
+            ]},
+            [0, 2], [2, 2], [0, 0], [2, 0]
+        );
+        drawPolygon2D([5, 0, 0], {method: GL.TRIANGLES, color: [0, 1, 1, 1]},
+            [0, 2], [2, 0], [-2, 0]
+        );
+        drawPolygon2D([-4, -3, 0], {method: gl.TRIANGLE_STRIP, color: [
+                [1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1], 
+                [1, 0, 1, 1], [1, 1, 0, 1], [0, 1, 1, 1]
+            ]},
+            [1.6, 0], [0.8, 0.8], [0.8, -0.8],
+            [-0.8, 0.8], [-0.8, -0.8], [-1.6, 0]
+        );
+        drawPolygon2D([4, 0, 0], {method: gl.TRIANGLES, color: [
+                [1, 0, 0, 1], [1, 0, 0, 1]
+            ]},
+            [-0.5, 0.5], [2, 0.5], [0.5, -0.5],
+            [0.5, -0.5], [-2, -0.5], [-0.5, 0.5],
+        );
+    }
+
+    function webGLStart() {
+        var canvas = document.getElementById("lesson01-canvas");
+        initGL(canvas);
+        initShaders();
+        initBasicMatrix();
+        initCanvas();
+        drawScene();
+        console.log("Init OK");
+    }
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="lesson01-canvas" style="border: none;" width="500" height="500"></canvas><!-- id屬性是為了方便於程式碼腳本找到需要的canvas -->
+</body>
+
+</html>

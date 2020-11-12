@@ -1,0 +1,74 @@
+<html>
+
+<head>
+<title>WebGL - HW4</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="../GLjs/webgl-utils.js"></script>
+<script type="text/javascript" src="util.js"></script>
+<script type="text/javascript" src="shader.js"></script>
+<script type="text/javascript" src="input.js"></script>
+<script type="text/javascript" src="drawable.js"></script>
+
+<script type="text/javascript">
+    function drawScene() {
+        obj1 = drawPolygon2D([-2, 2, -10], {method: GL.TRIANGLE_STRIP, texture: 4},
+            [0, 1.6], [0.8, 0.8], [-0.8, 0.8],
+            [0.8, -0.8], [-0.8, -0.8], [0, -1.6]
+        );
+        
+        obj2 = drawPolygon2D([2, -2, -10], {method: gl.TRIANGLES, texture: 2},
+            [-0.5, 0.5], [2, 0.5], [0.5, -0.5],
+            [0.5, -0.5], [-2, -0.5], [-0.5, 0.5],
+        );
+
+        FrameTickHandlers.push((dt) => {
+            objs = [obj1, obj2]
+
+            if(Input.isTriggered(Input.keymap.kQ)){
+                _ret = obj1.texture_id;
+                while(_ret == obj1.texture_id){ _ret = randInt(1, 5); }
+                obj1.texture_id = _ret;
+            }
+            if(Input.isTriggered(Input.keymap.kE)){
+                _ret = obj2.texture_id;
+                while(_ret == obj2.texture_id){ _ret = randInt(1, 5); }
+                obj2.texture_id = _ret;
+            } 
+            
+            rotate_vector = [
+            //  Anchor, Speed (X, Y, Z)
+                [[0, 1, 0], [72*3, 0, 26*3]],
+                [[0, 1, 0], [90, 0, 45]]
+            ]
+            
+            for(let i=0;i<objs.length;++i){
+                objs[i].rotate(rotate_vector[i][0], rotate_vector[i][1], dt/1000.0)
+            }
+        });
+    }
+
+    function webGLStart() {
+        var canvas = document.getElementById("main-canvas");
+        Input.initialize();
+        initGL(canvas);
+        initShaders();
+        initBasicMatrix();
+        initCanvas();
+        drawScene();
+        console.log("Init OK");
+    }
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="main-canvas" style="border: none;" width="500" height="500"></canvas><!-- id屬性是為了方便於程式碼腳本找到需要的canvas -->
+    <p>
+        Press 'Q' and 'E' to change texture of the polygon
+    </p>
+</body>
+
+</html>

@@ -1,0 +1,552 @@
+﻿<html>
+
+  <head>
+    <title>WebGL Course 7 -more texture</title>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+    <script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+
+    <script id="shader-fs" type="x-shader/x-fragment">
+      precision mediump float;
+
+      varying vec2 vTextureCoord;
+      uniform bool uEnableTexture;
+
+      uniform sampler2D uSampler;
+      uniform sampler2D uSurface;
+
+      uniform bool uEnableSurface;
+      void main(void) {
+    		gl_FragColor = texture2D(uSampler, vTextureCoord.st);
+    		if(uEnableSurface){
+    			vec4 surfaceColor = texture2D(uSurface, vTextureCoord.st);
+    			gl_FragColor = vec4(gl_FragColor.rgb * (1.0-surfaceColor.a)
+    					+ surfaceColor.rgb * surfaceColor.a, gl_FragColor.a);
+    		}
+        if(!uEnableTexture)gl_FragColor = vec4(0.0, 1.0, 1.0, 1.0);
+      }
+    </script>
+
+    <script id="shader-vs" type="x-shader/x-vertex">
+      attribute vec3 aVertexPosition;
+      attribute vec2 aTextureCoord;
+
+      uniform mat4 uViewMatrix;
+      uniform mat4 uModelMatrix;
+      uniform mat4 uProjectionMatrix;
+
+      varying vec2 vTextureCoord;
+
+      void main(void) {
+        gl_Position =  uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aVertexPosition, 1.0);
+        vTextureCoord = aTextureCoord;
+      }
+    </script>
+
+    <script type="text/javascript">
+      var gl;
+
+      function initGL(canvas) {
+        gl = null;
+        try {
+          // 嘗試獲得標準背景資料。如果失敗，退而獲取試驗版本
+          gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+          gl.viewportWidth = canvas.width;
+          gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+          alert("Could not initialise WebGL, sorry :-(");
+          window.location = "http://get.webgl.org";
+        }
+        //若不提供uniform boolean傳遞，則用uniform1i代替
+        if(typeof gl.uniform1b !== 'function')
+        gl.uniform1b = function(binding_data, bool_val){
+          gl.uniform1i(binding_data, !bool_val ? 0 : 1);
+        };
+      }
+
+
+      function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+          return null;
+        }
+
+        var str = shaderScript.textContent;
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+          shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+          shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+          return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          alert(gl.getShaderInfoLog(shader));
+          return null;
+        }
+
+        return shader;
+      }
+
+
+      var shaderProgram;
+
+      function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+          alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
+        gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
+
+        shaderProgram.projectionMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
+        shaderProgram.viewMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uViewMatrix");
+        shaderProgram.modelMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uModelMatrix");
+
+        shaderProgram.enableTextureUniform =
+          gl.getUniformLocation(shaderProgram, "uEnableTexture");
+
+        shaderProgram.samplerUniform = gl.getUniformLocation(shaderProgram, "uSampler");
+        shaderProgram.SurfaceUniform = gl.getUniformLocation(shaderProgram, "uSurface");
+        shaderProgram.EnableSurfaceUniform = gl.getUniformLocation(shaderProgram, "uEnableSurface");
+
+      }
+      //標記WebM畫面是否有更新
+      var copyWEBM_texture = false;
+
+      function setupWEBM_texture(url) {
+        const WEBM_texture = document.createElement('video');
+
+        var playing = false;
+        var timeupdate = false;
+
+        WEBM_texture.autoplay = true;
+        WEBM_texture.muted = true;
+        WEBM_texture.loop = true;
+
+        // Waiting for these 2 events ensures
+        // there is data in the WEBM_texture
+        //為了讓他能不停更新圖像，因此定義讓其於各個事件檢查撥放狀態
+        WEBM_texture.addEventListener('playing', function() {
+          playing = true;
+          checkReady();
+        }, true);
+
+        WEBM_texture.addEventListener('timeupdate', function() {
+          timeupdate = true;
+          checkReady();
+        }, true);
+
+        WEBM_texture.src = url;
+        WEBM_texture.play();
+
+        function checkReady() {
+          if (playing && timeupdate) {
+
+            copyWEBM_texture = true;
+          }
+        }
+
+        return WEBM_texture;
+      }
+
+      function handleLoadedTexture(texture) {
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+
+        //判斷紋理的長寬是否為2的冪次方後，加入紋理長寬不同維度的處理辦法
+        if (isPowerOfTwo(texture.image.width) && isPowerOfTwo(texture.image.height)){
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        }else{
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+          gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        }
+        gl.bindTexture(gl.TEXTURE_2D, null);
+      }
+
+      function isPowerOfTwo(x) {
+        return (x & (x - 1)) == 0;
+      }
+
+		function BindWEBMtexture(gl, texture, webm) {
+		  const level = 0;
+		  const internalFormat = gl.RGBA;
+		  const srcFormat = gl.RGBA;
+		  const srcType = gl.UNSIGNED_BYTE;
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+        srcFormat, srcType, webm);
+      }
+
+      var texturen = new Array();
+      var textur_name = [
+        "igl.gif", 			//實驗室LOGO
+        "NTOU64.png", 		//海大64周年標誌
+        "ebooks.jpg",
+        "NTOU.jpg", 		//國立臺灣海洋大學校徽
+        "ntoueecs.gif", 	//電機資訊學院院徽標誌
+        "html5-logo.png", 	//html5標誌
+        "surface.png"
+      ];
+      var texturesToLoad = 7;
+
+      var KobayakawaSaePufferFishFlying;
+
+      function loadTexture(sFilename) {
+        var len = texturen.length;
+        texturen[len] = gl.createTexture();
+        texturen[len].image = new Image();
+        texturen[len].image.onload = function() {
+          handleLoadedTexture(texturen[len]);
+          texturesToLoad--;
+
+          if(texturesToLoad == 0) {
+            tick();
+          }
+        }
+        texturen[len].image.src = sFilename;
+      }
+
+      function initTexture() {
+        for(var i in textur_name)loadTexture(textur_name[i]);
+        KobayakawaSaePufferFishFlying =
+        setupWEBM_texture("KobayakawaSaePufferFishFlying.webm");
+      }
+
+      var TopMatrix;
+      var matrix_modes = ["view", "model", "projection", "texture", "color"];
+      //定義特殊矩陣
+      var special_matrix_modes = {
+        "modelview":{
+          "get_matrix":function(){
+            var result = mat4.create();
+            mat4.multiply(TopMatrix("view"), TopMatrix("model"), result);
+            return result;
+          }
+        },
+        "modelviewprojection":{
+          "get_matrix":function(){
+            var result = mat4.create();
+            mat4.multiply(TopMatrix("projection"), TopMatrix("modelview"), result);
+            return result;
+          }
+        },
+        "normal":{
+          "get_matrix":function(){
+            var normalMatrix = mat3.create();
+            mat4.toInverseMat3(TopMatrix("modelview"), normalMatrix);
+            mat3.transpose(normalMatrix);
+            return normalMatrix;
+          }
+        },
+        "identity":{
+          "get_matrix":function(){
+            var result = mat4.create();
+            mat4.identity(result);
+            return result;
+          }
+        }
+      };
+      var Matries = [];
+
+      function initMatrix(){
+        //依序初始化所有矩陣堆疊
+        for(var i=0; i<matrix_modes.length; ++i){
+          Matries[matrix_modes[i]] = [mat4.create()];
+        }
+      }
+      TopMatrix = function(matrix_mode) {
+        if(special_matrix_modes[matrix_mode] &&
+          typeof special_matrix_modes[matrix_mode].get_matrix === "function"){
+            return special_matrix_modes[matrix_mode].get_matrix();
+        }
+          //只作用在矩陣堆疊的頂層
+        return Matries[matrix_mode][Matries[matrix_mode].length-1];
+      }
+      function PushMatrix(matrix_mode) {
+        //建立一個零矩陣來準備儲存矩陣
+        var copy = mat4.create();
+        //將堆疊頂層的矩陣複製一份
+        mat4.set(TopMatrix(matrix_mode), copy);
+        //再放進堆疊
+        Matries[matrix_mode].push(copy);
+      }
+
+      function PopMatrix(matrix_mode) {
+        if (Matries[matrix_mode].length == 0) {
+          throw "Invalid popMatrix!";
+        }
+        Matries[matrix_mode].pop();
+      }
+
+      function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.projectionMatrixUniform, false, TopMatrix("projection"));
+        gl.uniformMatrix4fv(shaderProgram.viewMatrixUniform, false, TopMatrix("view"));
+        gl.uniformMatrix4fv(shaderProgram.modelMatrixUniform, false, TopMatrix("model"));
+        gl.uniformMatrix3fv(shaderProgram.normalMatrixUniform, false, TopMatrix("normal"));
+        //尚未用到的矩陣
+        //gl.uniformMatrix4fv(shaderProgram.colorMatrixUniform, false, TopMatrix("color"));
+        //gl.uniformMatrix4fv(shaderProgram.textureMatrixUniform, false, TopMatrix("texture"));
+      }
+
+      function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+      }
+
+
+      var cubeVertexPositionBuffer;
+      var cubeVertexTextureCoordBuffer;
+      var cubeVertexIndexBuffer;
+
+      function initBuffers() {
+        cubeVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+        var vertices = [
+          // Front face
+          -1.0, -1.0,  1.0,
+          1.0, -1.0,  1.0,
+          1.0,  1.0,  1.0,
+          -1.0,  1.0,  1.0,
+
+          // Back face
+          -1.0, -1.0, -1.0,
+          -1.0,  1.0, -1.0,
+          1.0,  1.0, -1.0,
+          1.0, -1.0, -1.0,
+
+          // Top face
+          -1.0,  1.0, -1.0,
+          -1.0,  1.0,  1.0,
+          1.0,  1.0,  1.0,
+          1.0,  1.0, -1.0,
+
+          // Bottom face
+          -1.0, -1.0, -1.0,
+          1.0, -1.0, -1.0,
+          1.0, -1.0,  1.0,
+          -1.0, -1.0,  1.0,
+
+          // Right face
+          1.0, -1.0, -1.0,
+          1.0,  1.0, -1.0,
+          1.0,  1.0,  1.0,
+          1.0, -1.0,  1.0,
+
+          // Left face
+          -1.0, -1.0, -1.0,
+          -1.0, -1.0,  1.0,
+          -1.0,  1.0,  1.0,
+          -1.0,  1.0, -1.0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        cubeVertexPositionBuffer.itemSize = 3;
+        cubeVertexPositionBuffer.numItems = 24;
+
+        cubeVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER,cubeVertexTextureCoordBuffer);
+        var textureCoords = [
+          // Front face
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+
+          // Back face
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+          0.0, 0.0,
+
+          // Top face
+          0.0, 1.0,
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+
+          // Bottom face
+          1.0, 1.0,
+          0.0, 1.0,
+          0.0, 0.0,
+          1.0, 0.0,
+
+          // Right face
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+          0.0, 0.0,
+
+          // Left face
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoords), gl.STATIC_DRAW);
+        cubeVertexTextureCoordBuffer.itemSize = 2;
+        cubeVertexTextureCoordBuffer.numItems = 24;
+
+        cubeVertexIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+        var cubeVertexIndices = [
+          0, 1, 2,      0, 2, 3,    // Front face
+          4, 5, 6,      4, 6, 7,    // Back face
+          8, 9, 10,     8, 10, 11,  // Top face
+          12, 13, 14,   12, 14, 15, // Bottom face
+          16, 17, 18,   16, 18, 19, // Right face
+          20, 21, 22,   20, 22, 23  // Left face
+        ];
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices), gl.STATIC_DRAW);
+        cubeVertexIndexBuffer.itemSize = 1;
+        cubeVertexIndexBuffer.numItems = 36;
+
+        initMatrix();
+      }
+
+
+      var xRot = 0;
+      var yRot = 0;
+      var zRot = 0;
+
+      function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.identity(TopMatrix("projection"));
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, TopMatrix("projection"));
+
+        mat4.identity(TopMatrix("view"));
+
+        mat4.identity(TopMatrix("model"));
+
+        mat4.translate(TopMatrix("model"), [0.0, 0.0, -5.0]);
+        PushMatrix("model");
+        mat4.rotate(TopMatrix("model"), degToRad(xRot), [1, 0, 0]);
+        mat4.rotate(TopMatrix("model"), degToRad(yRot), [0, 1, 0]);
+        mat4.rotate(TopMatrix("model"), degToRad(zRot), [0, 0, 1]);
+
+        setMatrixUniforms();
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute,cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute,cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+
+        var enableTexture = document.getElementById("texture").checked;
+        gl.uniform1b(shaderProgram.enableTextureUniform, enableTexture);
+        //參考Toji之簡單作法，使用合併所有頂點到一個簡單的緩衝器，且透過不同的偏移呈現不同面的紋理
+        // Draw face 0
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texturen[0]);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, texturen[6]);
+        gl.uniform1i(shaderProgram.SurfaceUniform, 1);
+
+        gl.uniform1b(shaderProgram.EnableSurfaceUniform,true);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+
+        // Draw face 1
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, texturen[1]);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+        gl.uniform1b(shaderProgram.EnableSurfaceUniform,false);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 12);
+
+        // Draw face 2
+        if (copyWEBM_texture) BindWEBMtexture(gl, texturen[2], KobayakawaSaePufferFishFlying);
+        else gl.bindTexture(gl.TEXTURE_2D, texturen[2]);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 24);
+
+        // Draw face 3
+        gl.bindTexture(gl.TEXTURE_2D, texturen[3]);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 36);
+
+        // Draw face 4
+        gl.bindTexture(gl.TEXTURE_2D, texturen[4]);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 48);
+
+        // Draw face 5
+        gl.bindTexture(gl.TEXTURE_2D, texturen[5]);
+        gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 60);
+      }
+
+
+      var lastTime = 0;
+
+      function animate() {
+        var timeNow = new Date().getTime();
+        if (lastTime != 0) {
+          var elapsed = timeNow - lastTime;
+
+          xRot += (90 * elapsed) / 1000.0;
+          yRot += (90 * elapsed) / 1000.0;
+          zRot += (90 * elapsed) / 1000.0;
+        }
+        lastTime = timeNow;
+      }
+
+
+      function tick() {
+        window.requestAnimationFrame(tick);
+        drawScene();
+        animate();
+      }
+
+
+      function webGLStart() {
+        var canvas = document.getElementById("lesson07-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        initTexture();
+
+        gl.clearColor(0.0, 1.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+      }
+
+    </script>
+
+
+  </head>
+
+
+  <body onload="webGLStart();">
+    <p align="center">This version is more image loading as textures (compare with <a href="index.html">original version</a>). List some major changes:</p>
+    
+    <input type="checkbox" id="texture" checked /> Enable Texture Mapping <br/>
+    <canvas id="lesson07-canvas" style="border: none;" width="500" height="500"></canvas>
+
+    <br/>
+  </body>
+
+</html>

@@ -1,0 +1,120 @@
+<html>
+
+<head>
+<title>WebGL - HW6</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="../GLjs/webgl-utils.js"></script>
+<script type="text/javascript" src="util.js"></script>
+<script type="text/javascript" src="shader.js"></script>
+<script type="text/javascript" src="input.js"></script>
+<script type="text/javascript" src="drawable.js"></script>
+<script type="text/javascript" src="solar.js"></script>
+
+<script type="text/javascript">
+
+    function drawScene() {
+        let sun = drawSun();
+        let earth = drawEarth(sun);
+        let moon = drawMoon(earth);
+
+        window.Sun = sun;
+        sun.globalRotate([0,0,0], [80,60,0]);
+    }
+
+    const CamMoveSpeed = 10.0;
+    function updateCamera(dt){
+        let cam_delta = [0, 0, 0];
+
+        if(Input.isPressed(Input.keymap.kW)){cam_delta[2] += CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kA)){cam_delta[0] += CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kS)){cam_delta[2] -= CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kD)){cam_delta[0] -= CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kR)){cam_delta[1] -= CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kF)){cam_delta[1] += CamMoveSpeed;}
+        
+        if(window._FlagInverseCanera){
+            for(let i=0;i<cam_delta.length;++i){
+                cam_delta[i] *= -1;
+            }
+        }
+
+        let multiplier = dt / 1000.0;
+        if(Input.isPressed(Input.keymap.kLSHIFT)){multiplier *= 5;}
+        if(Input.isPressed(Input.keymap.kRSHIFT)){multiplier /= 5;}
+        
+        for(let i=0;i<window.objects.length;++i){
+            window.objects[i].move(cam_delta[0], cam_delta[1], cam_delta[2], multiplier);
+        }
+    }
+
+    function updateObjects(dt){
+        for(let i=0;i<window.objects.length;++i){
+            window.objects[i].update(dt);
+        }
+    }
+
+    function updateInvCamCheckbox(){
+        let domobj = document.getElementById("inv_cam");
+        window._FlagInverseCanera = domobj.checked;
+    }
+
+    var lastMousePos = [-1, -1];
+    const RotationSpeed  = 10.0;
+    function updateRotate(dt){
+        if(Input.isTriggered(Input.keymap.kMOUSE1)){
+            lastMousePos = clone(Input.mouseClientPOS);
+        }
+        else if(!Input.isPressed(Input.keymap.kMOUSE1)){ lastMousePos = [-1, -1]; return; }
+
+        if(lastMousePos[0] != -1 && Input.isMouseMoved){
+            let curMousePos = clone(Input.mouseClientPOS);
+            let dx = curMousePos[0] - lastMousePos[0];
+            let dy = curMousePos[1] - lastMousePos[1];
+            
+            lastMousePos = clone(curMousePos);
+            
+            let multiplier = RotationSpeed * dt / 1000.0;
+            console.log("rotate");
+            window.objects[0].globalRotate([0,0,0], [dx, dy, 0], multiplier);
+        }
+    }
+
+    function webGLStart() {
+        var canvas = document.getElementById("main-canvas");
+        canvas.rect = new Rect(canvas.clientLeft, canvas.clientTop, canvas.clientWidth, canvas.clientHeight);
+        window._mainCanvas = canvas;
+        window._FlagInverseCanera = true;
+        window.objects = [];
+
+        Input.initialize();
+        initGL(canvas);
+        initShaders();
+        initBasicMatrix();
+        initCanvas();
+        drawScene();
+        
+        updateInvCamCheckbox();
+        registerTickHandler(updateObjects, "update");
+        registerTickHandler(updateCamera, "cam");
+        registerTickHandler(updateRotate, 'rotate');
+        
+        console.log("Init OK");
+    }
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="main-canvas" style="border: none;" width="800" height="800"></canvas>
+    <p>
+        Use 'WASD' and 'RF' to move camera.
+    </p>
+    <span>
+    <input type="checkbox" id="inv_cam" onchange="updateInvCamCheckbox()" checked> Inverse camera direction
+    </span>
+</body>
+
+</html>

@@ -1,0 +1,146 @@
+<html>
+
+<head>
+<title>WebGL - HW5</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="../GLjs/webgl-utils.js"></script>
+<script type="text/javascript" src="util.js"></script>
+<script type="text/javascript" src="shader.js"></script>
+<script type="text/javascript" src="input.js"></script>
+<script type="text/javascript" src="drawable.js"></script>
+
+<script type="text/javascript">
+    function drawGround(){
+        window.objects = [];
+
+        let mmat = mat4.create();
+        mat4.identity(mmat);
+        mat4.translate(mmat, [0.0, -1.2, 0.0]);
+        mat4.rotate(mmat, deg2rad(15), [1, 0, 0]);
+        mat4.scale(mmat, [5, 0.1, 5]);
+        let _obj = drawCube([0, 0, -20], {modMatrix: mmat, color: [
+                [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1], 
+                [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1],
+                [0, 1, 1, 1], [0.2, 0.5, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1],  
+                [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1], 
+                [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1], 
+                [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1],
+            ]}, 
+            [1, 1, 1], [-1, 1, 1], [-1, 1, -1], [1, 1, -1],
+            [1, 0, 1], [-1, 0, 1], [-1, 0, -1], [1, 0, -1]
+        );
+        window.objects.push(_obj);
+        
+        let mmat2 = mat4.create();
+        mat4.identity(mmat2);
+        mat4.rotate(mmat2, deg2rad(45), [1, 1, 1]);
+        _obj = drawCube([0, 2, -20], {modMatrix: mmat2, color: [
+                [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1], 
+                [1, 0, 1, 1], [0, 0, 1, 1], [0, 1, 1, 1], [1, 0, 1, 1],
+                [0, 1, 1, 1], [0.2, 0.5, 1, 1], [0, 1, 0, 1], [1, 0, 1, 1],  
+                [1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1], [1, 0, 1, 1], 
+                [0, 1, 0, 1], [1, 0, 1, 1], [1, 1, 0, 1], [0, 0, 1, 1],
+                [1, 0, 1, 1], [1, 0, 0, 1], [0, 0, 1, 1], [0, 1, 0, 1],
+            ]}, 
+            [1, 1, 1], [-1, 1, 1], [-1, 1, -1], [1, 1, -1],
+            [1, -1, 1], [-1, -1, 1], [-1, -1, -1], [1, -1, -1]
+        );
+        window.objects.push(_obj);
+    }
+
+    function drawScene() {
+        drawGround();
+    }
+
+    const CamMoveSpeed = 10.0;
+    function updateCamera(dt){
+        let cam_delta = [0, 0, 0];
+
+        if(Input.isPressed(Input.keymap.kW)){cam_delta[2] += CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kA)){cam_delta[0] += CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kS)){cam_delta[2] -= CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kD)){cam_delta[0] -= CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kR)){cam_delta[1] -= CamMoveSpeed;}
+        if(Input.isPressed(Input.keymap.kF)){cam_delta[1] += CamMoveSpeed;}
+        if(Input.isTriggered(Input.keymap.kQ)){console.log(window.objects[0].view_matrix);}
+        
+        if(window._FlagInverseCanera){
+            for(let i=0;i<cam_delta.length;++i){
+                cam_delta[i] *= -1;
+            }
+        }
+
+        let multiplier = dt / 1000.0;
+        if(Input.isPressed(Input.keymap.kSHIFT)){multiplier *= 5;}
+        
+        for(let i=0;i<window.objects.length;++i){
+            window.objects[i].move(cam_delta[0], cam_delta[1], cam_delta[2], multiplier);
+        }
+    }
+
+    var lastMousePos = [-1, -1];
+    const RotationSpeed  = 10.0;
+    function updateRotate(dt){
+        
+        if(!Input.isPressed(Input.keymap.kMOUSE1)){
+            lastMousePos = [-1, -1];
+            // auto-rotate
+            window.objects[1].rotate([0,0,0], [10, 0, 10], 0.1);
+            return ;
+        }
+        else if(Input.isTriggerArea(Input.keymap.kMOUSE1, window._mainCanvas.rect)){
+            lastMousePos = clone(Input.mouseClientPOS);
+        }
+        
+        if(lastMousePos[0] != -1 && Input.isMouseMoved){
+            let curMousePos = clone(Input.mouseClientPOS);
+            let dx = curMousePos[0] - lastMousePos[0];
+            let dy = curMousePos[1] - lastMousePos[1];
+            
+            lastMousePos = clone(curMousePos);
+            
+            let multiplier = RotationSpeed * dt / 1000.0;
+            window.objects[1].rotate([0,0,0], [dx, dy, 0], multiplier);
+        }
+    }
+
+    function updateInvCamCheckbox(){
+        let domobj = document.getElementById("inv_cam");
+        window._FlagInverseCanera = domobj.checked;
+    }
+
+    function webGLStart() {
+        var canvas = document.getElementById("main-canvas");
+        canvas.rect = new Rect(canvas.clientLeft, canvas.clientTop, canvas.clientWidth, canvas.clientHeight);
+        window._mainCanvas = canvas;
+        window._FlagInverseCanera = true;
+
+        Input.initialize();
+        initGL(canvas);
+        initShaders();
+        initBasicMatrix();
+        initCanvas();
+        drawScene();
+        updateInvCamCheckbox();
+        registerTickHandler(updateCamera, 'main');
+        registerTickHandler(updateRotate, 'rotate');
+        console.log("Init OK");
+    }
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+    <canvas id="main-canvas" style="border: none;" width="800" height="800"></canvas>
+    <p>
+        Use 'WASD' and 'RF' to move camera, mouse to rotate the cube.
+    </p>
+    <span>
+    <input type="checkbox" id="inv_cam" onchange="updateInvCamCheckbox()" checked> Inverse camera direction
+    </span>
+</body>
+
+</html>

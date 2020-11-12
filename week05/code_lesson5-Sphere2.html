@@ -1,0 +1,379 @@
+<html>
+
+<head>
+<title>WebGL course 5</title>
+<meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+<script type="text/javascript" src="../GLjs/webgl-utils.js"></script>
+
+<script id="shader-fs" type="x-shader/x-fragment">
+    precision mediump float;
+
+    varying vec2 vVertexColor;
+
+    void main(void) {
+        gl_FragColor = vec4(vec3(vVertexColor.rg,1.0) , 1.0);
+    }
+</script>
+
+<script id="shader-vs" type="x-shader/x-vertex">
+    attribute vec3 aVertexPosition;
+    attribute vec2 aVertexColor;
+
+    uniform mat4 uViewMatrix;
+    uniform mat4 uModelMatrix;
+    uniform mat4 uProjectionMatrix;
+    uniform mat3 uNormalMatrix;
+
+    varying vec2 vVertexColor;
+
+    void main(void) {
+        mat4 lModelViewMatrix = uViewMatrix * uModelMatrix;
+        gl_Position = uProjectionMatrix * lModelViewMatrix * vec4(aVertexPosition, 1.0);
+        vVertexColor = aVertexColor;
+    }
+</script>
+
+
+<script type="text/javascript">
+
+    var gl;
+
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+
+
+    function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+            return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+            if (k.nodeType == 3) {
+                str += k.textContent;
+            }
+            k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+            shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+            shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+            return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert(gl.getShaderInfoLog(shader));
+            return null;
+        }
+
+        return shader;
+    }
+
+
+    var shaderProgram;
+
+    function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+            alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.moonColorAttribute = gl.getAttribLocation(shaderProgram, "aVertexColor");
+        gl.enableVertexAttribArray(shaderProgram.moonColorAttribute);
+
+        shaderProgram.projectionMatrixUniform =
+					gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
+				shaderProgram.viewMatrixUniform =
+					gl.getUniformLocation(shaderProgram, "uViewMatrix");
+				shaderProgram.modelMatrixUniform =
+					gl.getUniformLocation(shaderProgram, "uModelMatrix");
+				shaderProgram.normalMatrixUniform =
+					gl.getUniformLocation(shaderProgram, "uNormalMatrix");
+    }
+
+    var TopMatrix;
+    var matrix_modes = ["view", "model", "projection", "texture", "color"];
+    var special_matrix_modes = {
+      "modelview":{
+          "get_matrix":function(){
+              var result = mat4.create();
+              mat4.multiply(TopMatrix("view"), TopMatrix("model"), result);
+              return result;
+          }
+      },
+      "modelviewprojection":{
+          "get_matrix":function(){
+              var result = mat4.create();
+              mat4.multiply(TopMatrix("projection"), TopMatrix("modelview"), result);
+              return result;
+          }
+      },
+      "normal":{
+          "get_matrix":function(){
+              var normalMatrix = mat3.create();
+              mat4.toInverseMat3(TopMatrix("modelview"), normalMatrix);
+              mat3.transpose(normalMatrix);
+              return normalMatrix;
+          }
+      },
+      "identity":{
+          "get_matrix":function(){
+              var result = mat4.create();
+              mat4.identity(result);
+              return result;
+          }
+      }
+    };
+    var Matries = [];
+
+    function initMatrix(){
+        for(var i=0; i<matrix_modes.length; ++i){
+            Matries[matrix_modes[i]] = [mat4.create()];
+        }
+    }
+    TopMatrix = function(matrix_mode) {
+        if(special_matrix_modes[matrix_mode] &&
+            typeof special_matrix_modes[matrix_mode].get_matrix === "function"){
+              return special_matrix_modes[matrix_mode].get_matrix();
+        }
+        return Matries[matrix_mode][Matries[matrix_mode].length-1];
+    }
+    function PushMatrix(matrix_mode) {
+          var copy = mat4.create();
+          mat4.set(TopMatrix(matrix_mode), copy);
+          Matries[matrix_mode].push(copy);
+    }
+
+    function PopMatrix(matrix_mode) {
+        if (Matries[matrix_mode].length == 0) {
+            throw "Invalid popMatrix!";
+        }
+        Matries[matrix_mode].pop();
+    }
+
+    function setMatrixUniforms() {
+          gl.uniformMatrix4fv(shaderProgram.projectionMatrixUniform, false, TopMatrix("projection"));
+          gl.uniformMatrix4fv(shaderProgram.viewMatrixUniform, false, TopMatrix("view"));
+          gl.uniformMatrix4fv(shaderProgram.modelMatrixUniform, false, TopMatrix("model"));
+          gl.uniformMatrix3fv(shaderProgram.normalMatrixUniform, false, TopMatrix("normal"));
+    }
+
+
+    function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+    }
+
+
+    var mouseDown = false;
+    var lastMouseX = null;
+    var lastMouseY = null;
+
+    var moonRotationMatrix = mat4.create();
+    mat4.identity(moonRotationMatrix);
+
+    function handleMouseDown(event) {
+        mouseDown = true;
+        lastMouseX = event.clientX;
+        lastMouseY = event.clientY;
+    }
+
+
+    function handleMouseUp(event) {
+        mouseDown = false;
+    }
+
+
+    function handleMouseMove(event) {
+        if (!mouseDown) {
+            return;
+        }
+        var newX = event.clientX;
+        var newY = event.clientY;
+
+        var deltaX = newX - lastMouseX
+        var newRotationMatrix = mat4.create();
+        mat4.identity(newRotationMatrix);
+        mat4.rotate(newRotationMatrix, degToRad(deltaX / 10), [0, 1, 0]);
+
+        var deltaY = newY - lastMouseY;
+        mat4.rotate(newRotationMatrix, degToRad(deltaY / 10), [1, 0, 0]);
+
+        mat4.multiply(newRotationMatrix, moonRotationMatrix, moonRotationMatrix);
+
+        lastMouseX = newX
+        lastMouseY = newY;
+    }
+
+
+
+    var moonVertexPositionBuffer;
+    var moonVertexColorBuffer;
+    var moonVertexIndexBuffer;
+
+    function initBuffers() {
+        var latitudeBands = 90;
+        var longitudeBands = 90;
+        var radius = 1;
+
+        var vertexPositionData = [];
+        var moonColorData = [];
+        for (var latNumber=0; latNumber <= latitudeBands; latNumber++) {
+            var theta = latNumber * Math.PI / latitudeBands;
+            var sinTheta = Math.sin(theta);
+            var cosTheta = Math.cos(theta);
+
+            for (var longNumber=0; longNumber <= longitudeBands; longNumber++) {
+                var phi = longNumber * 2 * Math.PI / longitudeBands;
+                var sinPhi = Math.sin(phi);
+                var cosPhi = Math.cos(phi);
+
+                var x = cosPhi * sinTheta;
+                var y = cosTheta;
+                var z = sinPhi * sinTheta;
+                var u = 1-(longNumber / longitudeBands);
+                var v = 1-(latNumber / latitudeBands);
+
+                moonColorData.push(u);
+                moonColorData.push(v);
+                vertexPositionData.push(radius * x);
+                vertexPositionData.push(radius * y);
+                vertexPositionData.push(radius * z);
+            }
+        }
+
+        var indexData = [];
+        for (var latNumber=0; latNumber < latitudeBands; latNumber++) {//形成方形
+            for (var longNumber=0; longNumber < longitudeBands; longNumber++) {
+                var first = (latNumber * (longitudeBands + 1)) + longNumber;
+                var second = first + longitudeBands + 1;
+                indexData.push(first);
+                indexData.push(second);
+                indexData.push(first + 1);
+
+                indexData.push(second);
+                indexData.push(second + 1);
+                indexData.push(first + 1);
+            }
+        }
+
+        moonVertexColorBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexColorBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(moonColorData), gl.STATIC_DRAW);
+        moonVertexColorBuffer.itemSize = 2;
+        moonVertexColorBuffer.numItems = moonColorData.length / 2;
+
+        moonVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexPositionBuffer);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexPositionData), gl.STATIC_DRAW);
+        moonVertexPositionBuffer.itemSize = 3;
+        moonVertexPositionBuffer.numItems = vertexPositionData.length / 3;
+
+        moonVertexIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, moonVertexIndexBuffer);
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indexData), gl.STATIC_DRAW);
+        moonVertexIndexBuffer.itemSize = 1;
+        moonVertexIndexBuffer.numItems = indexData.length;
+
+        initMatrix();
+    }
+
+
+    function drawScene() {
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, TopMatrix("projection"));
+
+
+        mat4.identity(TopMatrix("view"));
+        mat4.translate(TopMatrix("view"), [0, 0, -6]);
+
+        mat4.identity(TopMatrix("model"));
+
+
+        mat4.multiply(TopMatrix("model"), moonRotationMatrix);
+
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, moonVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, moonVertexColorBuffer);
+        gl.vertexAttribPointer(shaderProgram.moonColorAttribute, moonVertexColorBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, moonVertexIndexBuffer);
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, moonVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+    }
+
+
+    function tick() {
+        requestAnimFrame(tick);
+        drawScene();
+    }
+
+
+    function webGLStart() {
+        var canvas = document.getElementById("lesson5-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+        canvas.onmousedown = handleMouseDown;
+        document.onmouseup = handleMouseUp;
+        document.onmousemove = handleMouseMove;
+
+        tick();
+    }
+
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+
+    <canvas id="lesson5-canvas" style="border: none;" width="500" height="500"></canvas>
+    <br/>
+
+
+        <h2>Use mouse to interact</h2>
+
+        <br/>
+</body>
+
+</html>

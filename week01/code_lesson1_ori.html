@@ -1,0 +1,105 @@
+﻿<html>
+
+<head>
+<title>WebGL Lesson 1 - original version</title>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+<script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+
+<script type="text/javascript">
+    var gl;
+    function initGL(canvas) {
+        try {
+            gl = canvas.getContext("experimental-webgl");//取得webGL的context
+            gl.viewportWidth = canvas.width;
+            gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+            alert("Could not initialise WebGL, sorry :-(");
+        }
+    }
+    </script>
+
+<script type="text/javascript" src="shader.js"></script>
+
+<script type="text/javascript">
+    var mvMatrix = mat4.create(); //儲存模型視圖矩陣
+    var pMatrix = mat4.create();  //儲存投影矩陣
+    function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.pMatrixUniform, false, pMatrix);  //將投影矩陣(projection matrix)寫入相應的內存
+        gl.uniformMatrix4fv(shaderProgram.mvMatrixUniform, false, mvMatrix);//模型視圖矩陣(model view matrix)
+    }
+    var triangleVertexPositionBuffer;
+    var squareVertexPositionBuffer;
+    function initBuffers() {  //初始化緩衝器
+        triangleVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+        var vertices = [
+             0.0,  1.0,  0.0,
+            -1.0, -1.0,  0.0,
+             1.0, -1.0,  0.0
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        triangleVertexPositionBuffer.itemSize = 3;  //3維(x,y,z)
+        triangleVertexPositionBuffer.numItems = 3;  //3個點
+        squareVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        vertices = [
+             1.0,  1.0,  0.0,
+            -1.0,  1.0,  0.0,
+             1.0, -1.0,  0.0,
+            -1.0, -1.0,  0.0
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        squareVertexPositionBuffer.itemSize = 3;  //3維(x,y,z)
+        squareVertexPositionBuffer.numItems = 4;  //4個點
+    }
+    function drawScene() {  //使用緩衝器畫三角與正方形
+        mat4.translate(mvMatrix, [-1.5, 0.0, -7.0]);
+        gl.bindBuffer(gl.ARRAY_BUFFER, triangleVertexPositionBuffer);
+        //(index, size, type, normalized, stride, offset)
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, triangleVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        setMatrixUniforms();//矩陣參數傳入顯示卡
+        gl.drawArrays(gl.TRIANGLES, 0, triangleVertexPositionBuffer.numItems);
+        mat4.translate(mvMatrix, [3.0, 0.0, 0.0]);
+        gl.bindBuffer(gl.ARRAY_BUFFER, squareVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, squareVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+        setMatrixUniforms();
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, squareVertexPositionBuffer.numItems);//TRIANGLE_STRIP:三角形帶
+    }
+    function webGLStart() { //初始化WebGL與著色器
+        var canvas = document.getElementById("lesson01-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+        gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight); //設定畫布大小,user可看區域
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);  //清除畫布
+        //正交投影
+        //(垂直視角角度,長寬比,viewport不過近於0.1不遠於100,projection)
+        mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pMatrix);
+        mat4.identity(mvMatrix);//單位矩陣(移動回原點)
+
+        drawScene();
+    }
+</script>
+
+
+</head>
+
+
+<body onload="webGLStart();">
+
+<p>The original version is from Learningwebgl.com (compare with the <a href="index1-1.html"><b>Matrix-combination version</b></a>)</p>
+    <a href="http://175.98.115.43/webgl/?p=18">&lt;&lt; Back to Course 1</a><br />
+
+    <canvas id="lesson01-canvas" style="border: none;" width="500" height="500"></canvas><!-- id屬性是為了方便於程式碼腳本找到需要的canvas -->
+
+    <br/>
+    <a href="http://175.98.115.43/webgl/?p=18">&lt;&lt; Back to Course 1</a><br />
+<p align="center">Thanks <a href="http://learningwebgl.com/lessons">WebGL Lessons</a></p>
+</body>
+
+</html>

@@ -1,0 +1,443 @@
+<html>
+
+  <head>
+    <title>WebGL course 5 - original version</title>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+    <script type="text/javascript" src="../GLjs/glMatrix-0.9.5.min.js"></script>
+    <script type="text/javascript" src="../GLjs/webgl-utils.js"></script>
+	<script type="text/javascript" src="../GLjs/bitmap-utils.js"></script>
+
+    <script id="shader-fs" type="x-shader/x-fragment">
+      precision mediump float;
+
+      varying vec2 vTextureCoord;
+
+      uniform sampler2D uSampler;
+
+      void main(void) {
+        gl_FragColor = texture2D(uSampler, vTextureCoord.st);
+      }
+    </script>
+
+    <script id="shader-vs" type="x-shader/x-vertex">
+      attribute vec3 aVertexPosition;
+      attribute vec2 aTextureCoord;
+
+      uniform mat4 uViewMatrix;
+      uniform mat4 uModelMatrix;
+      uniform mat4 uProjectionMatrix;
+
+      varying vec2 vTextureCoord;
+
+      void main(void) {
+        gl_Position = uProjectionMatrix * uViewMatrix * uModelMatrix * vec4(aVertexPosition, 1.0);
+        vTextureCoord = aTextureCoord;
+      }
+    </script>
+
+
+    <script type="text/javascript">
+
+     var gl;
+
+      function initGL(canvas) {
+        try {
+          gl = canvas.getContext("experimental-webgl");
+          gl.viewportWidth = canvas.width;
+          gl.viewportHeight = canvas.height;
+        } catch (e) {
+        }
+        if (!gl) {
+          alert("Could not initialise WebGL, sorry :-(");
+        }
+      }
+
+
+      function getShader(gl, id) {
+        var shaderScript = document.getElementById(id);
+        if (!shaderScript) {
+          return null;
+        }
+
+        var str = "";
+        var k = shaderScript.firstChild;
+        while (k) {
+          if (k.nodeType == Node.TEXT_NODE) {
+            str += k.textContent;
+          }
+          k = k.nextSibling;
+        }
+
+        var shader;
+        if (shaderScript.type == "x-shader/x-fragment") {
+          shader = gl.createShader(gl.FRAGMENT_SHADER);
+        } else if (shaderScript.type == "x-shader/x-vertex") {
+          shader = gl.createShader(gl.VERTEX_SHADER);
+        } else {
+          return null;
+        }
+
+        gl.shaderSource(shader, str);
+        gl.compileShader(shader);
+
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          alert(gl.getShaderInfoLog(shader));
+          return null;
+        }
+
+        return shader;
+      }
+
+
+      var shaderProgram;
+
+      function initShaders() {
+        var fragmentShader = getShader(gl, "shader-fs");
+        var vertexShader = getShader(gl, "shader-vs");
+
+        shaderProgram = gl.createProgram();
+        gl.attachShader(shaderProgram, vertexShader);
+        gl.attachShader(shaderProgram, fragmentShader);
+        gl.linkProgram(shaderProgram);
+
+        if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+          alert("Could not initialise shaders");
+        }
+
+        gl.useProgram(shaderProgram);
+
+        shaderProgram.vertexPositionAttribute = gl.getAttribLocation(shaderProgram, "aVertexPosition");
+        gl.enableVertexAttribArray(shaderProgram.vertexPositionAttribute);
+
+        shaderProgram.textureCoordAttribute = gl.getAttribLocation(shaderProgram, "aTextureCoord");
+        gl.enableVertexAttribArray(shaderProgram.textureCoordAttribute);
+
+        shaderProgram.projectionMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uProjectionMatrix");
+        shaderProgram.viewMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uViewMatrix");
+        shaderProgram.modelMatrixUniform =
+          gl.getUniformLocation(shaderProgram, "uModelMatrix");
+        shaderProgram.samplerUniform =
+          gl.getUniformLocation(shaderProgram, "uSampler");
+      }
+
+        var checkboard = [];
+        var checkboard_tex;
+        var checkboard_texture = [];
+        var checkboard_texture_tex;
+        var TSIZE = 256;
+        // Procedure to make a checkboard texture.
+        function make_check()
+        {
+        	var   i, j, c;
+        	for (i = 0; i<TSIZE; i++){
+        		checkboard[i]=[];
+        		for (j = 0; j<TSIZE; j++) {
+        			checkboard[i][j] = [];
+        			c = (((i & 0x10) == 0) ^ ((j & 0x10) == 0)) * 255;
+        			checkboard[i][j][0] = c;
+        			checkboard[i][j][1] = c;
+        			checkboard[i][j][2] = c;
+        			checkboard[i][j][3] = 255;
+        		}
+        	}
+        }
+        // Procedure to make a checkboard texture.
+        function make_texture()
+        {
+        	var   i, j, c;
+        	for (i = 0; i<TSIZE; i++){
+        		checkboard_texture[i] = [];
+        		for (j = 0; j<TSIZE; j++) {
+        			checkboard_texture[i][j] = [];
+        			c = (((i & 0x4) == 0) ^ ((j & 0x4) == 0)) * 255;
+        			checkboard_texture[i][j][0] = c;
+        			checkboard_texture[i][j][1] = c;
+        			checkboard_texture[i][j][2] = c;
+        			checkboard_texture[i][j][3] = 255;
+        		}
+        	}
+        }
+
+      function handleLoadedTexture(texture) {
+        gl.bindTexture(gl.TEXTURE_2D, texture); //綁定紋理到 gl.TEXTURE_2D
+        //gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true); // 所有被載入紋理圖片需要做垂直翻轉
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texture.image);
+        //影像類型、細節層級、顯示卡儲存影像的格式、影像各種通道的大小(也就是儲存於 R、G、B 之資料類型)、影像本身
+
+        //NEAREST使用原始影像的原樣去進行紋理特殊縮放
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); //放大紋理
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); //縮小紋理
+        gl.bindTexture(gl.TEXTURE_2D, null);  //將當前紋理設置為null
+      }
+
+
+      function initTexture() {
+		    make_check();
+		    make_texture();
+
+        checkboard_tex = gl.createTexture(); //建立紋理物件並傳送給neheTexture
+        checkboard_tex.image = new Image();
+        checkboard_tex.image.onload = function () {  //回呼函式(callback function)
+            handleLoadedTexture(checkboard_tex)
+		        now_texture = checkboard_tex;
+        }
+        checkboard_texture_tex = gl.createTexture(); //建立紋理物件並傳送給neheTexture
+        checkboard_texture_tex.image = new Image();
+        checkboard_texture_tex.image.onload = function () {  //回呼函式(callback function)
+            handleLoadedTexture(checkboard_texture_tex)
+        }
+
+        checkboard_tex.image.src = window.generateBitmapDataURL(checkboard, 1.0);
+        checkboard_texture_tex.image.src = window.generateBitmapDataURL(checkboard_texture, 1.0);
+      }
+
+
+      var matrix_modes = ["view", "model", "projection", "texture", "color"];
+      var Matries = [];
+
+      function initMatrix(){
+        //依序初始化所有矩陣堆疊
+        for(var i=0; i<matrix_modes.length; ++i){
+          Matries[matrix_modes[i]] = [mat4.create()];
+        }
+      }
+      function TopMatrix(matrix_mode) {
+        //只作用在矩陣堆疊的頂層
+        return Matries[matrix_mode][Matries[matrix_mode].length-1];
+      }
+      function PushMatrix(matrix_mode) {
+        //建立一個零矩陣來準備儲存矩陣
+        var copy = mat4.create();
+        //將堆疊頂層的矩陣複製一份
+        mat4.set(TopMatrix(matrix_mode), copy);
+        //再放進堆疊
+        Matries[matrix_mode].push(copy);
+      }
+
+      function PopMatrix(matrix_mode) {
+        if (Matries[matrix_mode].length == 0) {
+          throw "Invalid popMatrix!";
+        }
+        Matries[matrix_mode].pop();
+      }
+
+
+      function setMatrixUniforms() {
+        gl.uniformMatrix4fv(shaderProgram.projectionMatrixUniform, false, TopMatrix("projection"));
+        gl.uniformMatrix4fv(shaderProgram.viewMatrixUniform, false, TopMatrix("view"));
+        gl.uniformMatrix4fv(shaderProgram.modelMatrixUniform, false, TopMatrix("model"));
+        //尚未用到的矩陣
+        //gl.uniformMatrix4fv(shaderProgram.colorMatrixUniform, false, TopMatrix("color"));
+        //gl.uniformMatrix4fv(shaderProgram.textureMatrixUniform, false, TopMatrix("texture"));
+      }
+
+
+      function degToRad(degrees) {
+        return degrees * Math.PI / 180;
+      }
+
+      var cubeVertexPositionBuffer;
+      var cubeVertexTextureCoordBuffer;
+      var cubeVertexIndexBuffer;
+
+      function initBuffers() {
+        cubeVertexPositionBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+        vertices = [
+          -30.0, 0.0, -60.0,
+          30, 0.0, -60,
+          30, 0.0, 60,
+          -30, 0.0, 60.0
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+        cubeVertexPositionBuffer.itemSize = 3;
+        cubeVertexPositionBuffer.numItems = 4;
+
+        cubeVertexTextureCoordBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer); //建立一個紋理座標緩衝器
+        var textureCoords = [
+          0.0, 0.0,
+          1.0, 0.0,
+          1.0, 1.0,
+          0.0, 1.0,
+        ];
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(textureCoords), gl.STATIC_DRAW);
+        cubeVertexTextureCoordBuffer.itemSize = 2;
+        cubeVertexTextureCoordBuffer.numItems = 4;
+
+        cubeVertexIndexBuffer = gl.createBuffer();
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+        var cubeVertexIndices = [
+          0, 1, 2, 0, 2, 3,
+        ];
+        gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(cubeVertexIndices), gl.STATIC_DRAW);
+        cubeVertexIndexBuffer.itemSize = 1;
+        cubeVertexIndexBuffer.numItems = 6;
+
+        initMatrix();
+      }
+    var now_texture;
+    var viewHead = 0;
+    var viewRoll = 0;
+    var viewEpitch = 0;
+    var viewUppos = 0;
+    var viewRight = 0;
+    var viewZoom = 0;
+    var currentlyPressedKeys = {};
+
+    function handleKeyDown(event) {
+        currentlyPressedKeys[event.keyCode] = true;   //一個空物件類型
+
+    		if (String.fromCharCode(event.keyCode) == "P") { //P鍵
+    			now_using_shader++;
+    			now_using_shader = now_using_shader % shaderProgram.length;
+    			gl.useProgram(shaderProgram[now_using_shader]);
+        }
+    		if (String.fromCharCode(event.keyCode) == "1") { //1鍵
+    			gl.bindTexture(gl.TEXTURE_2D, checkboard_tex);
+
+    			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); //放大紋理
+    			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); //縮小紋理
+
+    			now_texture = checkboard_tex;
+        }
+    		if (String.fromCharCode(event.keyCode) == "2") { //2鍵
+    			gl.bindTexture(gl.TEXTURE_2D, checkboard_texture_tex);
+
+    			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST); //放大紋理
+    			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST); //縮小紋理
+
+    			now_texture = checkboard_texture_tex;
+        }
+    		if (String.fromCharCode(event.keyCode) == "3") { //2鍵
+    			gl.bindTexture(gl.TEXTURE_2D, checkboard_texture_tex);
+
+    			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); //放大紋理
+    			gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); //縮小紋理
+
+    			now_texture = checkboard_texture_tex;
+        }
+    }
+
+
+    function handleKeyUp(event) {
+        currentlyPressedKeys[event.keyCode] = false;
+    }
+
+
+    function handleKeys() {
+
+      if (currentlyPressedKeys[83]) viewZoom -= 0.5; //w
+  		if (currentlyPressedKeys[87]) viewZoom += 0.5; //s
+      if (currentlyPressedKeys[65]) viewRight += 0.5; //a
+  		if (currentlyPressedKeys[68]) viewRight -= 0.5; //d
+      if (currentlyPressedKeys[90]) viewUppos += 0.5; //z
+  		if (currentlyPressedKeys[88]) viewUppos -= 0.5; //x
+
+  		if (currentlyPressedKeys[82]) viewEpitch += 0.5; //r
+  		if (currentlyPressedKeys[70]) viewEpitch -= 0.5; //f
+  		if (currentlyPressedKeys[84]) viewHead += 0.5; //t
+  		if (currentlyPressedKeys[71]) viewHead -= 0.5; //g
+  		if (currentlyPressedKeys[89]) viewRoll += 0.5; //y
+  		if (currentlyPressedKeys[72]) viewRoll -= 0.5; //h
+		//
+    }
+
+
+
+      function drawScene() {
+	  	  gl.viewport(0, 0, gl.viewportWidth, gl.viewportHeight);
+
+        /*Clear previous frame and the depth buffer */
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+    		mat4.identity(TopMatrix("projection"));
+    		mat4.perspective(80, gl.viewportWidth / gl.viewportHeight, 1.0, 800.0, TopMatrix("projection"));
+
+    		/*Define the current eye position and the eye-coordinate system*/
+        mat4.identity(TopMatrix("view"));
+        var lookAtMatrix = mat4.create(TopMatrix("view"));
+        /*Define Viewing Matrix*/
+    		mat4.lookAt([0.0, 8.0, -50.0], [0.0, 0.0, 2.0], [0.0, 1.0, 0.0], lookAtMatrix);
+
+    		mat4.rotate(TopMatrix("view"), degToRad(viewHead), [0.0, 1.0, 0.0]);
+    		mat4.rotate(TopMatrix("view"), degToRad(viewRoll), [0.0, 0.0, 1.0]);
+    		mat4.rotate(TopMatrix("view"), degToRad(viewEpitch), [1.0, 0.0, 0.0]);
+
+        mat4.multiply(TopMatrix("view"), lookAtMatrix , TopMatrix("view"));
+
+        mat4.translate(TopMatrix("view"), [0.0, viewUppos, 0.0]);
+        mat4.translate(TopMatrix("view"), [-viewRight, 0.0, 0.0]);
+        mat4.translate(TopMatrix("view"), [0.0, 0.0, -viewZoom]);
+
+		   /* Draw the Scene */
+        mat4.identity(TopMatrix("model"));
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexPositionBuffer);
+        gl.vertexAttribPointer(shaderProgram.vertexPositionAttribute, cubeVertexPositionBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, cubeVertexTextureCoordBuffer);
+        gl.vertexAttribPointer(shaderProgram.textureCoordAttribute, cubeVertexTextureCoordBuffer.itemSize, gl.FLOAT, false, 0, 0);
+
+        gl.activeTexture(gl.TEXTURE0);    //載入的0號畫框
+        gl.bindTexture(gl.TEXTURE_2D, now_texture);
+        gl.uniform1i(shaderProgram.samplerUniform, 0);
+
+        gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, cubeVertexIndexBuffer);
+
+        setMatrixUniforms();
+        gl.drawElements(gl.TRIANGLES, cubeVertexIndexBuffer.numItems, gl.UNSIGNED_SHORT, 0);
+      }
+
+
+      var lastTime = 0;
+
+      function animate() {
+        var timeNow = new Date().getTime();
+        if (lastTime != 0) {
+          var elapsed = timeNow - lastTime;
+
+        }
+        lastTime = timeNow;
+      }
+
+
+      function tick() {
+        requestAnimFrame(tick);
+		handleKeys();
+        drawScene();
+        animate();
+      }
+
+
+      function webGLStart() {
+        var canvas = document.getElementById("lesson05-canvas");
+        initGL(canvas);
+        initShaders();
+        initBuffers();
+        initTexture();
+
+        gl.clearColor(0.0, 0.0, 0.0, 1.0);
+        gl.enable(gl.DEPTH_TEST);
+
+		document.onkeydown = handleKeyDown;   //按鍵壓下
+        document.onkeyup = handleKeyUp;   //放開此按鍵
+
+        tick();
+      }
+    </script>
+  </head>
+
+
+  <body onload="webGLStart();">
+    <p>示範Aliasing與鍵盤事件</p>
+    <canvas id="lesson05-canvas" style="border: none;" width="700" height="700"></canvas>
+
+    <br/>
+    <p align="center">Thanks <a href="http://learningwebgl.com/lessons">WebGL Lessons</a></p>
+  </body>
+
+</html>
