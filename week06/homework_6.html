@@ -19,7 +19,7 @@
         let moon = drawMoon(earth);
 
         window.Sun = sun;
-        sun.globalRotate([0,0,0], [80,60,0]);
+        sun.globalRotate([0,0,0], [100,20,0]);
     }
 
     const CamMoveSpeed = 10.0;
@@ -76,7 +76,7 @@
             
             let multiplier = RotationSpeed * dt / 1000.0;
             console.log("rotate");
-            window.objects[0].globalRotate([0,0,0], [dx, dy, 0], multiplier);
+            window.Sun.globalRotate([0,0,0], [dy, dx, 0], multiplier);
         }
     }
 
@@ -110,7 +110,7 @@
 <body onload="webGLStart();">
     <canvas id="main-canvas" style="border: none;" width="800" height="800"></canvas>
     <p>
-        Use 'WASD' and 'RF' to move camera.
+        Use 'WASD' and 'RF' to move camera; Mouse to rotate.
     </p>
     <span>
     <input type="checkbox" id="inv_cam" onchange="updateInvCamCheckbox()" checked> Inverse camera direction

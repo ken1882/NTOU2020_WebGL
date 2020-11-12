@@ -100,15 +100,25 @@ class Drawable{
     this.rotation[0] %= ROUND_RAD;
     this.rotation[1] %= ROUND_RAD;
     this.rotation[2] %= ROUND_RAD;
-    
+
     mat4.rotateX(this.model_matrix, rx, anchor[0]);
     mat4.rotateY(this.model_matrix, ry, anchor[1]);
     mat4.rotateZ(this.model_matrix, rz, anchor[2]);
+    // let rmat = identityMatrix(4);
+    // mat4.rotate(rmat, rx, [0, 1, 0]);
+    // mat4.rotate(rmat, ry, [1, 0, 0]);
+    // mat4.rotate(rmat, rz, [0, 0, 1]);
+    // mat4.rotate(rmat, rx, [anchor[0], 1, anchor[2]]);
+    // mat4.rotate(rmat, ry, [1, anchor[1], anchor[2]]);
+    // mat4.rotate(rmat, rz, [anchor[0], anchor[1], 1]);
+    // mat4.multiply(rmat, this.model_matrix, this.model_matrix);
   }
   /**
    * > Equivalent to `rotate(...)` but rotates whole system/subtree
    */
   globalRotate(anchor, scale, scale_mul=1.0){
+    if(!!this._locked){return ;}
+    this._locked = true;
     let rx = deg2rad(scale[0] * scale_mul);
     let ry = deg2rad(scale[1] * scale_mul);
     let rz = deg2rad(scale[2] * scale_mul);
@@ -131,6 +141,7 @@ class Drawable{
         }
       }
     }
+    this._locked = false;
   }
   /**
    * > Mobe object
@@ -167,7 +178,7 @@ class Drawable{
   /**
    * > Refresh (draw) object
    */
-  refresh(update_children=true, depth=0){
+  refresh(update_children=true){
     let vmat = TopMatrix("view");
     let pmat = TopMatrix("projection");
     
@@ -180,7 +191,6 @@ class Drawable{
     let mmat = matcpy(this.model_matrix);
     
     mat4.multiply(vmat, this.view_matrix);
-    mat4.multiply(mmat, wmat);
 
     if(!this.static && this.parent){
       let rx = this.posX;
@@ -206,11 +216,19 @@ class Drawable{
       y2 = yz2[0]; z2 = yz2[1];
 
       x2 = decimal(x2);  y2 = decimal(y2);  z2 = decimal(z2);
-
       vmat[12] += x2 - x1;
       vmat[13] += y2 - y1;
       vmat[14] += z2 - z1;
-      console.log(vmat[12], vmat[13], vmat[14])
+      mat4.multiply(wmat, mmat, mmat);
+      // if(Input.isTriggered(Input.keymap.kQ)){
+      //   console.log("---------");
+      //   console.log("pos: ", [x1,y1,z1], [x2,y2,z2]);
+      //   console.log("theta: ", rad2deg(theta), rad2deg(theta+this.world_rotation[1]));
+      //   console.log("phi: ", rad2deg(phi), rad2deg(phi+this.world_rotation[2]));
+      //   console.log("omega: ", rad2deg(omega), rad2deg(omega+this.world_rotation[0]));
+      //   console.log("wmat: ", wmat);
+      //   console.log("vmat: ", vmat);
+      // }
     }
 
     PushMatrix("projection", matcpy(pmat));
@@ -220,11 +238,22 @@ class Drawable{
     this._realX = vmat[12];
     this._realY = vmat[13];
     this._realZ = vmat[14];
+    if(this.static){
+      let theta = this.world_rotation[1] + this.rotation[1];
+      let phi   = this.world_rotation[2] + this.rotation[2];
+      let omega = this.world_rotation[0] + this.rotation[0];
+      if(Input.isTriggered(Input.keymap.kQ)){
+        console.log("---- static -----");
+        console.log(rad2deg(theta), rad2deg(phi), rad2deg(omega))
+      }
+      mat4.rotateX(mmat, omega, 0);
+      mat4.rotateY(mmat, theta, 0);
+      mat4.rotateZ(mmat, phi, 0);
+    }
+
     PushMatrix("model", mmat);
     PushMatrix("view", vmat);
 
-    // console.log(vmat, mmat);
-    
     if(this.type == OBJTYPE_2D){
       drawBuffer(this.vertex_buffer, this.color_buffer, this.method)
     }
@@ -237,7 +266,7 @@ class Drawable{
 
     if(update_children){
       for(let i=0;i<this.children.length;++i){
-        this.children[i].refresh(true, depth+1);
+        this.children[i].refresh(true);
       }
     }
 

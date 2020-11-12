@@ -13,6 +13,7 @@ let ViewportWidth  = 500;
 let ViewportHeight = 500;
 let OBJTYPE_2D = 0;
 let OBJTYPE_3D = 1;
+let ProjectionPerspectiveDegree = 45;
 
 let MatrixStack = ["view", "model", "projection", "texture", "color"]
 
@@ -270,7 +271,7 @@ function drawBuffer3D(vert_buf, color_buf, vert_idx_buf, method=null){
 
 function createDefaultProjMatrix(){
     let pmat = mat4.create();
-    mat4.perspective(45, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pmat);
+    mat4.perspective(ProjectionPerspectiveDegree, gl.viewportWidth / gl.viewportHeight, 0.1, 100.0, pmat);
     return pmat;
 }
 
@@ -806,7 +807,7 @@ function initCanvas(){
 }
 
 function update_main(){
-    // requestAnimFrame(update_main);
+    requestAnimFrame(update_main);
     cur_time = Date.now();
     dt = Date.now() - window._lastUpdateTime;
     update_input(dt);

@@ -55,17 +55,18 @@ function drawEarth(parent_sun){
   }, "spin");
 
   // rotate
+  earth_star._trackRotation = 0;
   earth_star.registerTickHandler((dt)=>{
     const speed_scale = deg2rad(EarthRotationSpeed * dt / 1000);
+    earth_star._trackRotation += speed_scale;
+    earth_star._trackRotation %= ROUND_RAD;
     let rx = earth_star.posX;
     let ry = earth_star.posY;
     let rz = earth_star.posZ;
     let rr = Math.sqrt(rx*rx+ry*ry+rz*rz)
-    let x2 = rr * Math.cos(speed_scale);
-    let y2 = rr * Math.sin(speed_scale);
-    // console.log(x2, y2);
-    // console.log(x2-earth_star.posX, y2-earth_star.posY)
-    // earth_star.move(x2-earth_star.posX, y2-earth_star.posY, 0);
+    let x2 = rr * Math.cos(earth_star._trackRotation);
+    let y2 = rr * Math.sin(earth_star._trackRotation);
+    earth_star.move(x2-earth_star.posX, y2-earth_star.posY, 0);
   }, "rotate");
   earth_star.ring = earth_ring;
   return earth_star;
@@ -91,12 +92,20 @@ function drawMoon(parent_earth){
   moon_star.rotate([0,0,0], [0,-20, 70+180]); // making dark-side back to earth
 
   // Moon has same self-spin and rotation speed
+  moon_star._trackRotation = 0;
   moon_star.registerTickHandler((dt)=>{
-    if(!moon_star.realX){return;}
-    const speed_scale = MoonRotationSpeed * dt / 1000;
-    moon_star.move(-MoonRingRadius, 0, 0);
-    mat4.rotate(moon_star.world_matrix, deg2rad(speed_scale), [0,0,1]);
-    moon_star.move(MoonRingRadius, 0, 0);
+    if(!moon_star.realX){return;};
+    const speed_scale = deg2rad(MoonRotationSpeed * dt / 1000);
+    moon_star._trackRotation += speed_scale;
+    moon_star._trackRotation %= ROUND_RAD;
+    let rx = moon_star.posX;
+    let ry = moon_star.posY;
+    let rz = moon_star.posZ;
+    let rr = Math.sqrt(rx*rx+ry*ry+rz*rz)
+    let x2 = rr * Math.cos(moon_star._trackRotation);
+    let y2 = rr * Math.sin(moon_star._trackRotation);
+    moon_star.move(x2-moon_star.posX, y2-moon_star.posY, 0);
+    moon_star.rotate([0,0,0], [0,0,1], MoonRotationSpeed*dt/1000);
   }, "rotate");
   moon_star.ring = moon_ring;
   return moon_star;
